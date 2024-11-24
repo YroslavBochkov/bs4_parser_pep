@@ -113,7 +113,7 @@ def download(session):
 
     with open(archive_path, 'wb') as file:
         file.write(response.content)
-    logging.info(f'Архив был загружен и сохранён: {archive_path}')
+    logging.info(f'Архив загружен и сохранён: {archive_path}')
 
 
 def pep(session):
