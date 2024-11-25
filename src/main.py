@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 from configs import configure_argument_parser, configure_logging
-from constants import BASE_DIR, MAIN_DOC_URL, PEPS_URL
+from constants import BASE_DIR, MAIN_DOC_URL, PEPS_URL, EXPECTED_STATUS
 from outputs import control_output
 from utils import (get_response, find_tag)
 
@@ -112,10 +112,9 @@ def pep():
     results = [('Статус', 'Количество')]
     section = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
 
-    # Начинаем логику из search_tables_info_in_section
     sections = find_tag(section, 'section', many=True)
     counted_results = {}
-    log_messages = []  # List to collect log messages
+    log_messages = []
 
     for sub_section in sections:
         table_header = find_tag(sub_section, 'h3').text
@@ -125,8 +124,8 @@ def pep():
             trs = find_tag(table.tbody, 'tr', many=True)
             for tr in tqdm(trs, desc=table_header[:25]):
                 tds = find_tag(tr, 'td', many=True)
-                status_on_main = tds[0].text.strip()  # Trim whitespace
-                if status_on_main:  # Check if not empty
+                status_on_main = tds[0].text.strip()
+                if status_on_main:
                     status_on_main = status_on_main[1:]
 
                 link = tds[2].a['href']
@@ -143,7 +142,6 @@ def pep():
                 counted_results[status_value] = counted_results.get(
                     status_value, 0) + 1
 
-                # Collect log messages instead of logging them immediately
                 if status_value not in EXPECTED_STATUS.get(status_on_main, []):
                     log_messages.append(
                         f'Несовпадающие статусы: \n{pep_link} \n'
@@ -151,7 +149,6 @@ def pep():
                         f'Ожидаемые статусы: {EXPECTED_STATUS[status_on_main]}'
                     )
 
-            # Log messages for unknown status on main
             if status_on_main not in EXPECTED_STATUS:
                 log_messages.append(
                     f'Неизвестный статус на главной: {status_on_main} '
@@ -159,7 +156,6 @@ def pep():
                     f'Статус в карточке: {status_value} \n'
                 )
 
-    # Log all messages at once
     if log_messages:
         logging.info('\n'.join(log_messages))
 
