@@ -13,6 +13,7 @@ from utils import (get_response, find_tag, search_tables_info_in_section)
 
 
 def whats_new(session=None):
+    """Парсинг страницы с новинками."""
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
     if session is None:
         session = requests_cache.CachedSession()
@@ -43,6 +44,7 @@ def whats_new(session=None):
 
 
 def latest_versions():
+    """Парсинг страницы с последними версиями."""
     session = requests_cache.CachedSession()
     response = get_response(session, MAIN_DOC_URL)
     if response is None:
@@ -72,6 +74,7 @@ def latest_versions():
 
 
 def download(session=None):
+    """Скачивание документации."""
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
     downloads_dir = BASE_DIR / 'downloads'
     downloads_dir.mkdir(exist_ok=True)
@@ -96,6 +99,7 @@ def download(session=None):
 
 
 def pep():
+    """Парсинг PEP."""
     pep_url = PEPS_URL
     session = requests_cache.CachedSession()
     response = get_response(session, pep_url)
