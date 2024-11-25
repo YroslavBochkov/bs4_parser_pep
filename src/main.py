@@ -9,7 +9,7 @@ from tqdm import tqdm
 from configs import configure_argument_parser, configure_logging
 from constants import BASE_DIR, MAIN_DOC_URL, PEPS_URL
 from outputs import control_output
-from utils import (get_response, find_tag, search_tables_info_in_section)
+from utils import (get_response, find_tag)
 
 
 def whats_new(session=None):
@@ -27,7 +27,7 @@ def whats_new(session=None):
                                               attrs={'class': 'toctree-l1'})
     results = [('Ссылка на статью', 'Заголовок', 'Редактор, автор')]
     for section in tqdm(sections_by_python, desc='Парсинг релизов'):
-        version_a_tag = section.find('a')
+        version_a_tag = find_tag(section, 'a')
         href = version_a_tag['href']
         version_link = urljoin(whats_new_url, href)
         response = get_response(session, version_link)
@@ -92,14 +92,17 @@ def download(session=None):
         archive_url = urljoin(downloads_url, pdf_a4_link)
         filename = archive_url.split('/')[-1]
         archive_path = downloads_dir / filename
-        response = session.get(archive_url)
+        response = get_response(session, archive_url)
+        if response is None:
+            logging.error(f'Не удалось скачать файл: {archive_url}')
+            continue
         with open(archive_path, 'wb') as file:
             file.write(response.content)
         logging.info(f'Архив был загружен и сохранён: {archive_path}')
 
 
 def pep():
-    """Парсинг PEP."""
+    """Парсинг PEP-8."""
     pep_url = PEPS_URL
     session = requests_cache.CachedSession()
     response = get_response(session, pep_url)
@@ -108,8 +111,61 @@ def pep():
     soup = BeautifulSoup(response.text, features='lxml')
     results = [('Статус', 'Количество')]
     section = find_tag(soup, 'section', attrs={'id': 'index-by-category'})
-    result = search_tables_info_in_section(section, session)
-    results += list(result.items())
+
+    # Начинаем логику из search_tables_info_in_section
+    sections = find_tag(section, 'section', many=True)
+    counted_results = {}
+    log_messages = []  # List to collect log messages
+
+    for sub_section in sections:
+        table_header = find_tag(sub_section, 'h3').text
+        tables = find_tag(sub_section, 'table', many=True)
+
+        for table in tables:
+            trs = find_tag(table.tbody, 'tr', many=True)
+            for tr in tqdm(trs, desc=table_header[:25]):
+                tds = find_tag(tr, 'td', many=True)
+                status_on_main = tds[0].text.strip()  # Trim whitespace
+                if status_on_main:  # Check if not empty
+                    status_on_main = status_on_main[1:]
+
+                link = tds[2].a['href']
+                pep_link = urljoin(PEPS_URL, link)
+                response = get_response(session, pep_link)
+
+                if response is None:
+                    return
+
+                pep_soup = BeautifulSoup(response.text, features='lxml')
+                status_tag = find_tag(pep_soup, string='Status')
+                status_value = status_tag.parent.next_sibling.next_sibling.text
+
+                counted_results[status_value] = counted_results.get(
+                    status_value, 0) + 1
+
+                # Collect log messages instead of logging them immediately
+                if status_value not in EXPECTED_STATUS.get(status_on_main, []):
+                    log_messages.append(
+                        f'Несовпадающие статусы: \n{pep_link} \n'
+                        f'Статус в карточке: {status_value} \n'
+                        f'Ожидаемые статусы: {EXPECTED_STATUS[status_on_main]}'
+                    )
+
+            # Log messages for unknown status on main
+            if status_on_main not in EXPECTED_STATUS:
+                log_messages.append(
+                    f'Неизвестный статус на главной: {status_on_main} '
+                    f'\n{pep_link} \n'
+                    f'Статус в карточке: {status_value} \n'
+                )
+
+    # Log all messages at once
+    if log_messages:
+        logging.info('\n'.join(log_messages))
+
+    total = sum(counted_results.values())
+    counted_results['Total'] = total
+    results.extend(list(counted_results.items()))
     return results
 
 
